@@ -1,7 +1,7 @@
 const nodemailer = require('nodemailer');
 
 // ═══════════════════════════════════════════════════════════════
-// Gmail SMTP ტრანსპორტერის ინიციალიზაცია
+// Gmail SMTP ტრანსპორტერის ინიციალიზაცია (IPv4 კავშირი)
 // ═══════════════════════════════════════════════════════════════
 if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
   console.log('⚠️  გაფრთხილება: EMAIL_USER ან EMAIL_PASS არ არის გაწერილი .env ფაილში!');
@@ -11,6 +11,7 @@ const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.EMAIL_PORT || '465'),
   secure: true, // true 465 პორტისთვის (SSL)
+  family: 4, // ✅ IPv4-ს ეძლევა უპირატესობა (Render-ის IPv6 ნაკლებობის გამო)
   auth: {
     user: process.env.EMAIL_USER, // თქვენი გმაილი
     pass: process.env.EMAIL_PASS, // 16-ნიშნა აპლიკაციის პაროლი
