@@ -80,17 +80,31 @@ exports.createWorker = async (req, res) => {
     const savedWorker = await worker.save();
     console.log('✅ Worker saved! ID:', savedWorker._id);
 
-    // ── Send Welcome Email ──
+    // ═══════════════════════════════════════════════════════════════
+    // ── Send Welcome Email (უსაფრთხო ბლოკი) ──
+    // ═══════════════════════════════════════════════════════════════
     let emailSent = false;
     if (savedWorker.email) {
-      emailSent = await sendWorkerWelcomeEmail(savedWorker);
+      try {
+        emailSent = await sendWorkerWelcomeEmail(savedWorker);
+      } catch (mailErr) {
+        console.error('❌ შეცდომა Welcome Email-ის გაგზავნისას:', mailErr.message);
+        emailSent = false; 
+      }
     } else {
       console.warn('⚠️  Worker has no email - skipping welcome email');
     }
 
-    // ── Send Admin Notification ──
+    // ═══════════════════════════════════════════════════════════════
+    // ── Send Admin Notification (უსაფრთხო ბლოკი) ──
+    // ═══════════════════════════════════════════════════════════════
     let adminNotified = false;
-    adminNotified = await sendAdminNotification(savedWorker);
+    try {
+      adminNotified = await sendAdminNotification(savedWorker);
+    } catch (adminMailErr) {
+      console.error('❌ შეცდომა Admin Notification-ის გაგზავნისას:', adminMailErr.message);
+      adminNotified = false;
+    }
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('✅ WORKER REGISTRATION COMPLETE');
