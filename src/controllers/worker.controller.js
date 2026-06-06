@@ -7,9 +7,21 @@ const { sendWorkerWelcomeEmail, sendAdminNotification } = require('../services/w
 // ────────────────────────────────────────────────────────────────────────────
 exports.createWorker = async (req, res) => {
   try {
+    // 🔍 DEBUG: Log incoming request
+    console.log('\n📝 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 NEW WORKER REGISTRATION REQUEST');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📞 Phone (raw):', req.body.phone);
+    console.log('📞 Phone (type):', typeof req.body.phone);
+    console.log('📞 Phone (length):', req.body.phone ? req.body.phone.length : 'N/A');
+    console.log('📞 First Name:', req.body.fname);
+    console.log('📞 Last Name:', req.body.lname);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
     // Validate request
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.error('❌ Validation errors:', errors.array());
       return res.status(400).json({
         success: false,
         errors: errors.array()
@@ -24,14 +36,27 @@ exports.createWorker = async (req, res) => {
       avail, schedule, salary, cvNames
     } = req.body;
 
+    // 🔍 DEBUG: Log after trim
+    const phoneToCheck = phone.trim();
+    console.log('📞 Phone (after trim):', phoneToCheck);
+    console.log('📞 Phone (length after trim):', phoneToCheck.length);
+
     // Check if phone already exists
-    const existingWorker = await Worker.findOne({ phone });
+    console.log('🔎 Searching for existing worker with phone:', phoneToCheck);
+    const existingWorker = await Worker.findOne({ phone: phoneToCheck });
+    
     if (existingWorker) {
+      console.log('⚠️ DUPLICATE FOUND!');
+      console.log('⚠️ Existing worker ID:', existingWorker._id);
+      console.log('⚠️ Existing worker phone:', existingWorker.phone);
+      console.log('⚠️ Existing worker name:', existingWorker.fname, existingWorker.lname);
       return res.status(400).json({
         success: false,
         error: 'ამ ტელეფონ ნომრით უკვე არის რეგისტრირებული პროფილი'
       });
     }
+    
+    console.log('✅ No existing worker found with this phone - proceeding...');
 
     // Create new worker
     const worker = new Worker({
@@ -41,7 +66,7 @@ exports.createWorker = async (req, res) => {
       gender: gender || '',
       pid: pid || '',
       city,
-      phone: phone.trim(),
+      phone: phoneToCheck, // Use trimmed phone
       email: email ? email.trim() : '',
       wa: wa || '',
       fb: fb || '',
@@ -65,11 +90,14 @@ exports.createWorker = async (req, res) => {
     });
 
     // Save to database
+    console.log('💾 Saving worker to database...');
     const savedWorker = await worker.save();
+    console.log('✅ Worker saved! ID:', savedWorker._id);
 
     // ── Send Welcome Email to Worker ──────────────────────────────────────────
     if (savedWorker.email) {
       try {
+        console.log('📧 Attempting to send welcome email to:', savedWorker.email);
         await sendWorkerWelcomeEmail(savedWorker);
         console.log(`✅ Welcome email sent to worker: ${savedWorker.email}`);
       } catch (emailErr) {
@@ -82,12 +110,17 @@ exports.createWorker = async (req, res) => {
 
     // ── Send Admin Notification ───────────────────────────────────────────────
     try {
+      console.log('📧 Attempting to send admin notification...');
       await sendAdminNotification(savedWorker);
       console.log('✅ Admin notification sent');
     } catch (emailErr) {
       console.error('❌ Admin notification failed:', emailErr.message);
       // არ ვაჩერებთ - email შეცდომა არ უნდა შეაფერხოს რეგისტრაცია
     }
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('✅ WORKER REGISTRATION COMPLETE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     res.status(201).json({
       success: true,
@@ -97,7 +130,8 @@ exports.createWorker = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error creating worker:', error);
+    console.error('❌ ERROR creating worker:', error.message);
+    console.error('Stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'პროფილის შენახვისას შეცდომა',

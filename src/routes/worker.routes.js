@@ -21,10 +21,15 @@ const validateWorker = [
   body('city')
     .notEmpty().withMessage('ქალაქი აუცილებელია'),
 
+  // ✅ FIXED: Phone regex corrected
+  // ✅ ახლა მხარს უჭერს:
+  //    - "5XXXXXXXXX" (10 ციფრი) - ✅ 
+  //    - "+9955XXXXXXXXX" (9 ციფრი +995-ს შემდეგ) - ✅
+  //    - "+995 5 XXXXXXXX" (სპეისით) - ✅
   body('phone')
     .trim()
     .notEmpty().withMessage('ტელეფონი აუცილებელია')
-    .matches(/^\+?995\s?5[0-9]{8}$|^5[0-9]{8}$|^\+995[0-9]{9}$/).withMessage('ტელეფონი არასწორი ფორმატია'),
+    .matches(/^(\+?995\s?)?5\d{8}$|^\+9955\d{8}$/).withMessage('ტელეფონი არასწორი ფორმატია (მაგ: 5XXXXXXXXX ან +995 5 XXXXXXXX)'),
 
   body('email')
     .optional()
