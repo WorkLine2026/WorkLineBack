@@ -7,16 +7,9 @@ const { sendWorkerWelcomeEmail, sendAdminNotification } = require('../services/w
 // ────────────────────────────────────────────────────────────────────────────
 exports.createWorker = async (req, res) => {
   try {
-    // 🔍 DEBUG: Log incoming request
-    console.log('\n📝 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔍 NEW WORKER REGISTRATION REQUEST');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📞 Phone (raw):', req.body.phone);
-    console.log('📞 Phone (type):', typeof req.body.phone);
-    console.log('📞 Phone (length):', req.body.phone ? req.body.phone.length : 'N/A');
-    console.log('📞 First Name:', req.body.fname);
-    console.log('📞 Last Name:', req.body.lname);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.log('\n🚀 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🚀 NEW WORKER REGISTRATION REQUEST');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // Validate request
     const errors = validationResult(req);
@@ -36,28 +29,21 @@ exports.createWorker = async (req, res) => {
       avail, schedule, salary, cvNames
     } = req.body;
 
-    // 🔍 DEBUG: Log after trim
     const phoneToCheck = phone.trim();
-    console.log('📞 Phone (after trim):', phoneToCheck);
-    console.log('📞 Phone (length after trim):', phoneToCheck.length);
+    console.log('📞 Phone:', phoneToCheck);
+    console.log('📧 Email:', email);
 
     // Check if phone already exists
-    console.log('🔎 Searching for existing worker with phone:', phoneToCheck);
     const existingWorker = await Worker.findOne({ phone: phoneToCheck });
     
     if (existingWorker) {
-      console.log('⚠️ DUPLICATE FOUND!');
-      console.log('⚠️ Existing worker ID:', existingWorker._id);
-      console.log('⚠️ Existing worker phone:', existingWorker.phone);
-      console.log('⚠️ Existing worker name:', existingWorker.fname, existingWorker.lname);
+      console.log('⚠️  Duplicate phone found!');
       return res.status(400).json({
         success: false,
         error: 'ამ ტელეფონ ნომრით უკვე არის რეგისტრირებული პროფილი'
       });
     }
     
-    console.log('✅ No existing worker found with this phone - proceeding...');
-
     // Create new worker
     const worker = new Worker({
       fname: fname.trim(),
@@ -66,7 +52,7 @@ exports.createWorker = async (req, res) => {
       gender: gender || '',
       pid: pid || '',
       city,
-      phone: phoneToCheck, // Use trimmed phone
+      phone: phoneToCheck,
       email: email ? email.trim() : '',
       wa: wa || '',
       fb: fb || '',
@@ -94,44 +80,36 @@ exports.createWorker = async (req, res) => {
     const savedWorker = await worker.save();
     console.log('✅ Worker saved! ID:', savedWorker._id);
 
-    // ── Send Welcome Email to Worker ──────────────────────────────────────────
+    // ── Send Welcome Email ──
+    let emailSent = false;
     if (savedWorker.email) {
-      try {
-        console.log('📧 Attempting to send welcome email to:', savedWorker.email);
-        await sendWorkerWelcomeEmail(savedWorker);
-        console.log(`✅ Welcome email sent to worker: ${savedWorker.email}`);
-      } catch (emailErr) {
-        console.error('❌ Welcome email failed:', emailErr.message);
-        // არ ვაჩერებთ - email შეცდომა არ უნდა შეაფერხოს რეგისტრაცია
-      }
+      emailSent = await sendWorkerWelcomeEmail(savedWorker);
     } else {
-      console.warn('⚠️ Worker has no email - skipping welcome email');
+      console.warn('⚠️  Worker has no email - skipping welcome email');
     }
 
-    // ── Send Admin Notification ───────────────────────────────────────────────
-    try {
-      console.log('📧 Attempting to send admin notification...');
-      await sendAdminNotification(savedWorker);
-      console.log('✅ Admin notification sent');
-    } catch (emailErr) {
-      console.error('❌ Admin notification failed:', emailErr.message);
-      // არ ვაჩერებთ - email შეცდომა არ უნდა შეაფერხოს რეგისტრაცია
-    }
+    // ── Send Admin Notification ──
+    let adminNotified = false;
+    adminNotified = await sendAdminNotification(savedWorker);
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('✅ WORKER REGISTRATION COMPLETE');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.log('✅ Worker ID:', savedWorker._id);
+    console.log('✅ Welcome Email Sent:', emailSent);
+    console.log('✅ Admin Notified:', adminNotified);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     res.status(201).json({
       success: true,
       message: 'პროფილი წარმატებით შენახულია',
       workerId: savedWorker._id,
+      emailSent: emailSent,
+      adminNotified: adminNotified,
       data: savedWorker
     });
 
   } catch (error) {
     console.error('❌ ERROR creating worker:', error.message);
-    console.error('Stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'პროფილის შენახვისას შეცდომა',

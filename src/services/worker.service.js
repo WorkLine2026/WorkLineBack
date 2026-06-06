@@ -1,29 +1,4 @@
-const nodemailer = require('nodemailer');
-
-// ═══════════════════════════════════════════════════════════════
-// Gmail SMTP ტრანსპორტერის ინიციალიზაცია (IPv4 კავშირი)
-// ═══════════════════════════════════════════════════════════════
-console.log('\n🚀 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-console.log('🚀 Gmail Email Service Setup Active');
-console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-console.log('EMAIL_USER:', process.env.EMAIL_USER || 'work.1999line@gmail.com');
-console.log('SENDER_EMAIL:', process.env.SENDER_EMAIL || process.env.EMAIL_USER);
-console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-  console.log('⚠️  გაფრთხილება: EMAIL_USER ან EMAIL_PASS არ არის გაწერილი .env ფაილში!');
-}
-
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.EMAIL_PORT || '465'),
-  secure: true, // true 465 პორტისთვის (SSL)
-  family: 4, // ✅ IPv4-ს ეძლევა უპირატესობა (Render-ის IPv6 ნაკლებობის გამო)
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // თქვენი 16-ნიშნა აპლიკაციის პაროლი
-  },
-});
+const transporter = require('../config/email-config');
 
 // ═══════════════════════════════════════════════════════════════
 // ✓ Send Welcome Email to Worker
@@ -31,7 +6,17 @@ const transporter = nodemailer.createTransport({
 async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
   try {
     const fromEmail = process.env.SENDER_EMAIL || process.env.EMAIL_USER;
-    let toEmail = worker.email;
+    
+    if (!worker.email) {
+      console.warn('⚠️  Worker has no email - skipping welcome email');
+      return false;
+    }
+
+    console.log('\n📧 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 SENDING WELCOME EMAIL');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 To:', worker.email);
+    console.log('📧 Name:', worker.fname, worker.lname);
 
     const medbookLabel = {
       yes: 'გაქვს',
@@ -119,18 +104,6 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
               <span class="detail-key">სქესი:</span>
               <span class="detail-val">${worker.gender}</span>
             </div>` : ''}
-            ${worker.pid ? `<div class="detail-row">
-              <span class="detail-key">პირადი ნომერი:</span>
-              <span class="detail-val">${worker.pid}</span>
-            </div>` : ''}
-            ${worker.wa ? `<div class="detail-row">
-              <span class="detail-key">WhatsApp:</span>
-              <span class="detail-val">${worker.wa}</span>
-            </div>` : ''}
-            ${worker.fb ? `<div class="detail-row">
-              <span class="detail-key">Facebook:</span>
-              <span class="detail-val">${worker.fb}</span>
-            </div>` : ''}
           </div>
 
           <div class="section">
@@ -151,14 +124,6 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
               <span class="detail-key">ენები:</span>
               <span class="detail-val">${worker.langs.join(', ')}</span>
             </div>` : ''}
-            ${worker.computer && worker.computer.length > 0 ? `<div class="detail-row">
-              <span class="detail-key">კომპ. უნარები:</span>
-              <span class="detail-val">${worker.computer.join(', ')}</span>
-            </div>` : ''}
-            ${worker.bio ? `<div class="detail-row">
-              <span class="detail-key">ბიო:</span>
-              <span class="detail-val" style="max-width:60%; word-break:break-word;">${worker.bio}</span>
-            </div>` : ''}
           </div>
 
           ${(worker.certs && worker.certs.length > 0) || (worker.customCerts && worker.customCerts.length > 0) ? `
@@ -176,10 +141,6 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
               <span class="detail-key">სამედიცინო წიგნი:</span>
               <span class="detail-val">${medbookLabel[worker.medbook] || '—'}</span>
             </div>
-            ${worker.healthNote ? `<div class="detail-row">
-              <span class="detail-key">შენიშვნა:</span>
-              <span class="detail-val">${worker.healthNote}</span>
-            </div>` : ''}
             ${worker.restrictions && worker.restrictions.length > 0 ? `
             <div style="margin-top: 10px;">
               <strong style="color: #666; display: block; margin-bottom: 6px;">შეზღუდვები:</strong>
@@ -239,34 +200,29 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
 
     const mailOptions = {
       from: `"WorkLine" <${fromEmail}>`,
-      to: toEmail,
+      to: worker.email,
       subject: `🎉 გემსახურებით WorkLine-ში, ${worker.fname}!`,
       html: htmlContent,
     };
 
-    const filteredBCC = [];
-    if (Array.isArray(bccEmails)) {
-      bccEmails.forEach(email => {
-        if (email && email.trim() && email !== toEmail && !filteredBCC.includes(email)) {
-          filteredBCC.push(email.trim());
-        }
-      });
-    }
-
-    if (filteredBCC.length > 0) {
-      mailOptions.bcc = filteredBCC.join(', '); // გადავაბათ მძიმით Nodemailer-ისთვის
-      console.log('📧 Welcome Email (Gmail):');
-      console.log('  TO:', toEmail);
-      console.log('  BCC:', filteredBCC.join(', '));
-    } else {
-      console.log('📧 Welcome Email (Gmail):');
-      console.log('  TO:', toEmail);
-    }
-
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Welcome email sent via Gmail to ${toEmail}. ID: ${info.messageId}`);
+    
+    console.log('✅ Welcome email sent successfully!');
+    console.log('✅ Message ID:', info.messageId);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    return true;
+
   } catch (err) {
-    console.error('❌ Gmail Welcome Email error:', err.message);
+    console.error('\n❌ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ WELCOME EMAIL SEND ERROR');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ Error:', err.message);
+    console.error('❌ To:', worker.email);
+    console.error('❌ Code:', err.code);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    return false;
   }
 }
 
@@ -281,11 +237,16 @@ async function sendAdminNotification(worker, bccEmails = []) {
       .filter(e => e);
 
     if (!adminEmails.length) {
-      console.warn('⚠️ ADMIN_EMAILS not configured in .env');
-      return;
+      console.warn('⚠️  ADMIN_EMAILS not configured in .env');
+      return false;
     }
 
     const fromEmail = process.env.SENDER_EMAIL || process.env.EMAIL_USER;
+
+    console.log('\n📧 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 SENDING ADMIN NOTIFICATION');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 To:', adminEmails.join(', '));
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -330,10 +291,6 @@ async function sendAdminNotification(worker, bccEmails = []) {
             <span class="detail-val">${worker.wa || '—'}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-key">Facebook:</span>
-            <span class="detail-val">${worker.fb || '—'}</span>
-          </div>
-          <div class="detail-row">
             <span class="detail-key">ქალაქი:</span>
             <span class="detail-val">${worker.city || '—'}</span>
           </div>
@@ -354,33 +311,13 @@ async function sendAdminNotification(worker, bccEmails = []) {
             <span class="detail-val">${worker.langs ? worker.langs.join(', ') : '—'}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-key">კომპ. უნარები:</span>
-            <span class="detail-val">${worker.computer && worker.computer.length ? worker.computer.join(', ') : '—'}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">სამედიცინო წიგნი:</span>
-            <span class="detail-val">${worker.medbook || '—'}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">შეზღუდვები:</span>
-            <span class="detail-val">${worker.restrictions && worker.restrictions.length ? worker.restrictions.join(', ') : '—'}</span>
-          </div>
-          <div class="detail-row">
             <span class="detail-key">ხელმისაწვდომობა:</span>
             <span class="detail-val">${worker.avail || '—'}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-key">სამუშაო საათები:</span>
-            <span class="detail-val">${worker.schedule && worker.schedule.length ? worker.schedule.join(', ') : '—'}</span>
           </div>
           <div class="detail-row">
             <span class="detail-key">ანაზღაურება:</span>
             <span class="detail-val">${worker.salary ? worker.salary + ' ₾' : 'მოლაპარაკება'}</span>
           </div>
-          ${worker.bio ? `<div class="detail-row">
-            <span class="detail-key">ბიო:</span>
-            <span class="detail-val" style="max-width:60%; word-break:break-word;">${worker.bio}</span>
-          </div>` : ''}
 
           <a href="${process.env.ADMIN_PANEL_URL || 'https://work-line-six.vercel.app/admin'}/workers" class="btn">
             ადმინ პანელში ნახვა
@@ -393,18 +330,30 @@ async function sendAdminNotification(worker, bccEmails = []) {
 
     const info = await transporter.sendMail({
       from: `"WorkLine ნოტიფიკაცია" <${fromEmail}>`,
-      to: adminEmails.join(', '), // ყველა ადმინის მისამართი მძიმით გამოყოფილი
+      to: adminEmails.join(', '),
       subject: `🔔 ახალი ვორკერი: ${worker.fname} ${worker.lname}`,
       html: htmlContent,
     });
 
-    console.log(`✅ Admin notification sent via Gmail. ID: ${info.messageId}`);
+    console.log('✅ Admin notification sent successfully!');
+    console.log('✅ Message ID:', info.messageId);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    return true;
+
   } catch (err) {
-    console.error('❌ Gmail Admin Notification error:', err.message);
+    console.error('\n❌ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ ADMIN NOTIFICATION ERROR');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ Error:', err.message);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    return false;
   }
 }
 
 module.exports = {
   sendWorkerWelcomeEmail,
-  sendAdminNotification
+  sendAdminNotification,
+  transporter,
 };
