@@ -9,8 +9,9 @@ if (!process.env.SMSOFFICE_API_KEY) {
 const SMS_CONFIG = {
   API_KEY: process.env.SMSOFFICE_API_KEY,
   BASE_URL: 'https://smsoffice.ge/api/v2/send/',
-  // 💡 შეცვლილია 'SMSOFFICE'-ზე, რათა არ დაერტყას შეცდომა 150, სანამ საკუთარ ბრენდულ სახელს დაამტკიცებ
-  SENDER: process.env.SMSOFFICE_SENDER || 'SMSOFFICE'
+  // 💡 შეცვლილია 'smsoffice'-ზე (ყველა პატარა ასოთი), როგორც დოკუმენტაციაშია!
+  // ამით Render-ის ძველ ცვლადსაც გადავაწერთ თავზე.
+  SENDER: 'smsoffice' 
 };
 
 /**
@@ -52,22 +53,22 @@ async function sendVerificationSMS(phoneNumber, code) {
     const data = qs.stringify({
       key: SMS_CONFIG.API_KEY,
       destination: formattedPhone,
-      sender: SMS_CONFIG.SENDER,
+      sender: SMS_CONFIG.SENDER, // გაიგზავნება მყარად "smsoffice"
       content: message,
-      urgent: 'true'
+      urgent: 'true' // დოკუმენტაციის თანახმად, გამჭოლი მესიჯებისთვის
     });
 
-    console.log(`📤 SMS გაგზავნა: ${formattedPhone}`);
+    console.log(`📤 SMS გაგზავნა: ${formattedPhone} (Sender: ${SMS_CONFIG.SENDER})`);
 
-    // ✅ SMS გაგზავნა POST მეთოდით
+    // ✅ SMS გაგზავნა POST მეთოდით დახრილი ხაზით ბოლოში (send/)
     const response = await axios.post(SMS_CONFIG.BASE_URL, data, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
 
-    // ✅ რესპონსის შემოწმება (ErrorCode === 0 ნიშნავს წარმატებას)
-    if (response.data && response.data.ErrorCode === 0) {
+    // ✅ რესპონსის შემოწმება (დოკუმენტაციის მიხედვით: Success ან ErrorCode)
+    if (response.data && (response.data.Success === true || response.data.ErrorCode === 0)) {
       console.log(`✅ SMS გაგზავნა წარმატებულია: ${formattedPhone}`);
       return {
         success: true,
