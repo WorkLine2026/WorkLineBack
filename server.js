@@ -40,6 +40,9 @@ const jobRequestRoutes = require('./src/routes/Jobrequest.routes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 💡 მუშაობს Render-ზე: ვრთავთ პროქსის ნდობას rate-limiter-ის შეცდომის ასარიდებლად
+app.set('trust proxy', 1);
+
 // ═══════════════════════════════════════════════════════════════
 // Middleware - CORS დაკონფიგურირება (trailing slash მოსწორებული)
 // ═══════════════════════════════════════════════════════════════
@@ -125,7 +128,7 @@ app.get('/api/test-email', async (req, res) => {
     
     res.status(500).json({ 
       success: false, 
-      error: err.message,
+      error: err.message, 
       code: err.code,
       hint: 'Check .env file: EMAIL_USER and EMAIL_PASS must be correct'
     });
@@ -137,7 +140,6 @@ app.get('/api/test-email', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 app.get('/api/test-sms', async (req, res) => {
   try {
-    // ✅ smsoffice.ge კონფიგურაცია შემოწმება
     if (!process.env.SMSOFFICE_API_KEY) {
       return res.status(400).json({
         success: false,
@@ -148,13 +150,13 @@ app.get('/api/test-sms', async (req, res) => {
 
     const { sendVerificationSMS } = require('./src/services/sms.service');
     
-    const testPhone = req.query.phone || '+995591234567'; // დეფოლტი: test ნომერი
+    const testPhone = req.query.phone || '+995591234567';
     
     console.log('\n🧪 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🧪 SMS SERVICE TEST (smsoffice.ge)');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📱 Sending test SMS to:', testPhone);
-    console.log('📱 Sender:', process.env.SMSOFFICE_SENDER || 'WorkLine');
+    console.log('📱 Sender:', process.env.SMSOFFICE_SENDER || 'SMSOFFICE');
     
     await sendVerificationSMS(testPhone, '654321');
     
@@ -165,7 +167,7 @@ app.get('/api/test-sms', async (req, res) => {
       success: true, 
       message: 'SMS test successful!',
       sentTo: testPhone,
-      from: process.env.SMSOFFICE_SENDER || 'WorkLine',
+      from: process.env.SMSOFFICE_SENDER || 'SMSOFFICE',
       service: 'smsoffice.ge'
     });
     
@@ -179,7 +181,7 @@ app.get('/api/test-sms', async (req, res) => {
     
     res.status(500).json({ 
       success: false, 
-      error: err.message,
+      error: err.message, 
       code: err.code,
       hint: 'Check .env file: SMSOFFICE_API_KEY must be correct'
     });
@@ -202,7 +204,7 @@ app.get('/api/debug/env', (_, res) => {
     SENDER_EMAIL: process.env.SENDER_EMAIL,
     ADMIN_EMAILS: process.env.ADMIN_EMAILS,
     SMSOFFICE_API_KEY: process.env.SMSOFFICE_API_KEY ? '✅ SET' : '❌ MISSING',
-    SMSOFFICE_SENDER: process.env.SMSOFFICE_SENDER || 'WorkLine (default)',
+    SMSOFFICE_SENDER: process.env.SMSOFFICE_SENDER || 'SMSOFFICE',
     FRONTEND_URL: FRONTEND_URL,
   });
 });
@@ -232,10 +234,6 @@ connectDB().then(() => {
     console.log(`📱 SMS Service: smsoffice.ge (${process.env.SMSOFFICE_API_KEY ? '✅' : '❌'} configured)`);
     console.log(`👤 Admin Emails: ${process.env.ADMIN_EMAILS || 'not configured'}`);
     console.log(`✅ CORS allowed from: ${FRONTEND_URL}`);
-    console.log(`\n🧪 Test Endpoints:`);
-    console.log(`   📧 Email: http://localhost:${PORT}/api/test-email?email=your@email.com`);
-    console.log(`   📱 SMS:   http://localhost:${PORT}/api/test-sms?phone=+995591234567`);
-    console.log(`   🔍 Debug: http://localhost:${PORT}/api/debug/env`);
   });
 }).catch((err) => {
   console.error('❌ Database connection failed:', err);

@@ -9,7 +9,8 @@ if (!process.env.SMSOFFICE_API_KEY) {
 const SMS_CONFIG = {
   API_KEY: process.env.SMSOFFICE_API_KEY,
   BASE_URL: 'https://smsoffice.ge/api/v2/send/',
-  SENDER: process.env.SMSOFFICE_SENDER || 'WorkLine'
+  // 💡 შეცვლილია 'SMSOFFICE'-ზე, რათა არ დაერტყას შეცდომა 150, სანამ საკუთარ ბრენდულ სახელს დაამტკიცებ
+  SENDER: process.env.SMSOFFICE_SENDER || 'SMSOFFICE'
 };
 
 /**
