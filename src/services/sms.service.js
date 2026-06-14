@@ -1,11 +1,6 @@
 const axios = require('axios');
 const qs = require('qs');
 
-// ═══════════════════════════════════════════════════════════════
-// SMSOFFICE.GE SMS SERVICE
-// https://smsoffice.ge/api/v2/
-// ═══════════════════════════════════════════════════════════════
-
 if (!process.env.SMSOFFICE_API_KEY) {
   console.log('⚠️  გაფრთხილება: smsoffice.ge API Key არ არის გაწერილი .env ფაილში!');
   console.log('   დაგჭირდებათ: SMSOFFICE_API_KEY');
@@ -18,15 +13,18 @@ const SMS_CONFIG = {
 };
 
 /**
- * ტელეფონის ფორმატირება international ფორმატში (995577123456)
- * @param {string} phoneNumber - ტელეფონი ნებისმიერი ფორმატში
- * @returns {string} - ფორმატირებული ნომერი
+ * ტელეფონის ფორმატირება საერთაშორისო ფორმატში (995577123456) + და 00-ის გარეშე
+ * @param {string} phoneNumber - ტელეფონი ნებისმიერ ფორმატში
+ * @returns {string} - ფორმატირებული ნომერი (მხოლოდ ციფრები)
  */
 function formatPhoneNumber(phoneNumber) {
-  let cleaned = phoneNumber.replace(/\D/g, ''); // მხოლოდ ციფრები
+  let cleaned = phoneNumber.replace(/\D/g, ''); // ტოვებს მხოლოდ ციფრებს
   
+  if (cleaned.startsWith('00995')) {
+    cleaned = cleaned.substring(2);
+  }
   if (cleaned.startsWith('995')) {
-    return cleaned; // უკვე სწორი
+    return cleaned; // უკვე სწორია
   }
   if (cleaned.startsWith('0')) {
     cleaned = cleaned.substring(1); // 0555123456 → 555123456
@@ -36,13 +34,12 @@ function formatPhoneNumber(phoneNumber) {
 
 /**
  * 6-ციფრა ვერიფიკაციის კოდის გაგზავნა SMS-ით (smsoffice.ge)
- * @param {string} phoneNumber - მიმღების ტელეფონი (მაგ: +995591234567 ან 0591234567)
+ * @param {string} phoneNumber - მიმღების ტელეფონი
  * @param {string} code - 6-ციფრა კოდი
  */
 async function sendVerificationSMS(phoneNumber, code) {
   try {
-    // ✅ ტელეფონის ფორმატის შემოწმება
-    if (!phoneNumber || !/^\+?[0-9]{10,}$/.test(phoneNumber.replace(/\s/g, ''))) {
+    if (!phoneNumber) {
       throw new Error('არასწორი ტელეფონის ნომერი');
     }
 
@@ -50,7 +47,7 @@ async function sendVerificationSMS(phoneNumber, code) {
     const ttl = process.env.VERIFY_CODE_TTL_MINUTES || 10;
     const message = `WorkLine: თქვენი ვერიფიკაციის კოდი: ${code}. ის მოქმედია ${ttl} წუთის განმავლობაში.`;
 
-    // ✅ Request body (form-encoded)
+    // ✅ Request body ფორმატირება application/x-www-form-urlencoded-ისთვის
     const data = qs.stringify({
       key: SMS_CONFIG.API_KEY,
       destination: formattedPhone,
@@ -61,16 +58,16 @@ async function sendVerificationSMS(phoneNumber, code) {
 
     console.log(`📤 SMS გაგზავნა: ${formattedPhone}`);
 
-    // ✅ SMS გაგზავნა smsoffice.ge-ს მეშვეობით
+    // ✅ SMS გაგზავნა POST მეთოდით
     const response = await axios.post(SMS_CONFIG.BASE_URL, data, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
 
-    // ✅ რেპონსის შემოწმება
-    if (response.data.ErrorCode === 0) {
-      console.log(`✅ SMS გაგზავნა წარმატებული: ${formattedPhone}`);
+    // ✅ რესპონსის შემოწმება (ErrorCode === 0 ნიშნავს წარმატებას)
+    if (response.data && response.data.ErrorCode === 0) {
+      console.log(`✅ SMS გაგზავნა წარმატებულია: ${formattedPhone}`);
       return {
         success: true,
         messageId: response.data.Output?.MessageID || 'unknown',
@@ -78,7 +75,7 @@ async function sendVerificationSMS(phoneNumber, code) {
         status: response.data.Message
       };
     } else {
-      throw new Error(`smsoffice კოდი ${response.data.ErrorCode}: ${response.data.Message}`);
+      throw new Error(`smsoffice კოდი ${response.data?.ErrorCode}: ${response.data?.Message}`);
     }
 
   } catch (err) {
@@ -93,9 +90,9 @@ async function sendVerificationSMS(phoneNumber, code) {
 async function checkSmsBalance() {
   try {
     const response = await axios.get(
-      `https://smsoffice.ge/api/getBalance?key=${SMS_CONFIG.API_KEY}`
+      `http://smsoffice.ge/api/getBalance?key=${SMS_CONFIG.API_KEY}`
     );
-    console.log(`💰 SMS ბალანსი: ${response.data}`);
+    console.log(`💰 SMS ბალანსი: ${response.data} SMS`);
     return response.data;
   } catch (err) {
     console.error('❌ ბალანსის შემოწმება ვერ მოხერხდა:', err.message);

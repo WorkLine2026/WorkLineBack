@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const Company = require('../models/company');
-const { sendVerificationSMS } = require('../services/sms.service');
 const Person = require('../models/person');
+const { sendVerificationSMS } = require('../services/sms.service');
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -17,13 +17,21 @@ function generateToken(companyId) {
   );
 }
 
+function generatePersonToken(personId) {
+  return jwt.sign(
+    { id: personId, type: 'person' },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+}
+
 function codeExpiresAt() {
   const ttl = Number(process.env.VERIFY_CODE_TTL_MINUTES) || 10;
   return new Date(Date.now() + ttl * 60 * 1000);
 }
 
 /**
- * ✅ ტელეფონის ფორმატირება international ფორმატში (995577123456)
+ * ტელეფონის პირველადი ფორმატირება
  */
 function formatPhoneForSMS(phone) {
   let cleaned = phone.replace(/\D/g, '');
@@ -56,7 +64,6 @@ async function register(req, res) {
     const email = contact.email.toLowerCase().trim();
     const formattedPhone = formatPhoneForSMS(contact.phone);
 
-    // ✅ ტელეფონის ვალიდაცია
     if (!/^\d{10,}$/.test(formattedPhone)) {
       return res.status(400).json({ message: 'არასწორი ტელეფონის ნომერი' });
     }
@@ -103,9 +110,9 @@ async function register(req, res) {
       });
     }
 
-    // ✅ SMS გაგზავნა (ელ-ფოსტის ნაცვლად)
+    // ✅ SMS გაგზავნა რეალურ ნომერზე (პლუსის გარეშე)
     try {
-      await sendVerificationSMS(`+${formattedPhone}`, verificationCode);
+      await sendVerificationSMS(formattedPhone, verificationCode);
     } catch (smsErr) {
       console.error('❌ SMS error:', smsErr.message);
       return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა. სცადეთ ხელახლა.' });
@@ -209,9 +216,9 @@ async function resend(req, res) {
     company.verificationCodeExpires = codeExpiresAt();
     await company.save();
 
-    // ✅ SMS გაგზავნა
+    // ✅ SMS ხელახლა გაგზავნა (პლუსის გარეშე)
     try {
-      await sendVerificationSMS(`+${company.phone}`, verificationCode);
+      await sendVerificationSMS(company.phone, verificationCode);
     } catch (smsErr) {
       console.error('❌ SMS error:', smsErr.message);
       return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
@@ -285,14 +292,6 @@ async function login(req, res) {
 //  PERSON AUTH (SMS VERIFICATION)
 // ════════════════════════════════════════════════════════════
 
-function generatePersonToken(personId) {
-  return jwt.sign(
-    { id: personId, type: 'person' },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
-}
-
 // POST /api/auth/person/register
 async function registerPerson(req, res) {
   try {
@@ -315,7 +314,6 @@ async function registerPerson(req, res) {
       return res.status(400).json({ message: 'პაროლი მინიმუმ 8 სიმბოლოს უნდა შეიცავდეს.' });
     }
 
-    // ✅ ტელეფონის ფორმატირება
     const formattedPhone = formatPhoneForSMS(phone);
     if (!/^\d{10,}$/.test(formattedPhone)) {
       return res.status(400).json({ message: 'არასწორი ტელეფონის ნომერი.' });
@@ -323,7 +321,6 @@ async function registerPerson(req, res) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // ✅ თუ ელ-ფოსტა უკვე არის, მაგრამ არ არის ვერიფიცირებული
     const existing = await Person.findOne({ email: normalizedEmail });
     if (existing) {
       if (!existing.isVerified) {
@@ -333,8 +330,9 @@ async function registerPerson(req, res) {
         existing.phone                   = formattedPhone;
         await existing.save();
 
+        // ✅ SMS ხელახლა გაგზავნა (პლუსის გარეშე)
         try {
-          await sendVerificationSMS(`+${formattedPhone}`, code);
+          await sendVerificationSMS(formattedPhone, code);
         } catch (smsErr) {
           console.error('❌ SMS error:', smsErr.message);
           return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა. სცადეთ ხელახლა.' });
@@ -342,7 +340,8 @@ async function registerPerson(req, res) {
 
         return res.status(200).json({
           message: 'კოდი ხელახლა გამოგზავნილია.',
-          phone: formattedPhone.replace(/\d(?=\d{4})/g, '*')
+          phone: formattedPhone.replace(/\d(?=\d{4})/g, '*'),
+          email: normalizedEmail
         });
       }
       return res.status(409).json({ message: 'ეს ელ-ფოსტა უკვე რეგისტრირებულია.' });
@@ -355,8 +354,9 @@ async function registerPerson(req, res) {
 
     const code = generateCode();
 
+    // ✅ SMS გაგზავნა (პლუსის გარეშე)
     try {
-      await sendVerificationSMS(`+${formattedPhone}`, code);
+      await sendVerificationSMS(formattedPhone, code);
 
       await Person.create({
         firstName, lastName, birthDate, gender, idNumber, city,
@@ -375,6 +375,7 @@ async function registerPerson(req, res) {
       return res.status(201).json({
         message: 'კოდი გამოგზავნილია SMS-ით.',
         phone: formattedPhone.replace(/\d(?=\d{4})/g, '*'),
+        email: normalizedEmail
       });
 
     } catch (smsErr) {
@@ -466,8 +467,9 @@ async function resendPersonCode(req, res) {
     person.verificationCodeExpires = codeExpiresAt();
     await person.save();
 
+    // ✅ SMS ხელახლა გაგზავნა (პლუსის გარეშე)
     try {
-      await sendVerificationSMS(`+${person.phone}`, code);
+      await sendVerificationSMS(person.phone, code);
 
       if (process.env.NODE_ENV !== 'production') {
         console.log(`[DEV] resent SMS code for ${person.phone}: ${code}`);
