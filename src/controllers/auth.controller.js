@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const Company = require('../models/company');
-const { sendVerificationEmail } = require('../services/email.service');
+const { sendVerificationSMS } = require('../services/sms.service');
 const Person = require('../models/person');
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -22,6 +22,24 @@ function codeExpiresAt() {
   return new Date(Date.now() + ttl * 60 * 1000);
 }
 
+/**
+ * ✅ ტელეფონის ფორმატირება international ფორმატში (995577123456)
+ */
+function formatPhoneForSMS(phone) {
+  let cleaned = phone.replace(/\D/g, '');
+  if (cleaned.startsWith('995')) {
+    return cleaned;
+  }
+  if (cleaned.startsWith('0')) {
+    cleaned = cleaned.substring(1);
+  }
+  return `995${cleaned}`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// COMPANY AUTH (SMS VERIFICATION)
+// ════════════════════════════════════════════════════════════════════════════
+
 // ── POST /api/auth/register ────────────────────────────────────────────────────
 async function register(req, res) {
   try {
@@ -36,6 +54,12 @@ async function register(req, res) {
     }
 
     const email = contact.email.toLowerCase().trim();
+    const formattedPhone = formatPhoneForSMS(contact.phone);
+
+    // ✅ ტელეფონის ვალიდაცია
+    if (!/^\d{10,}$/.test(formattedPhone)) {
+      return res.status(400).json({ message: 'არასწორი ტელეფონის ნომერი' });
+    }
 
     const existingVerified = await Company.findOne({ email, isVerified: true });
     if (existingVerified) {
@@ -60,7 +84,7 @@ async function register(req, res) {
       companyDoc.identificationCode = company.identificationCode.trim();
       companyDoc.sector             = company.sector;
       companyDoc.city               = company.city;
-      companyDoc.phone              = contact.phone.trim();
+      companyDoc.phone              = formattedPhone;
       companyDoc.password           = password;
       companyDoc.verificationCode        = verificationCode;
       companyDoc.verificationCodeExpires = verificationCodeExpires;
@@ -71,7 +95,7 @@ async function register(req, res) {
         identificationCode: company.identificationCode.trim(),
         sector:             company.sector,
         city:               company.city,
-        phone:              contact.phone.trim(),
+        phone:              formattedPhone,
         email,
         password,
         verificationCode,
@@ -79,13 +103,23 @@ async function register(req, res) {
       });
     }
 
-    await sendVerificationEmail(email, verificationCode);
+    // ✅ SMS გაგზავნა (ელ-ფოსტის ნაცვლად)
+    try {
+      await sendVerificationSMS(`+${formattedPhone}`, verificationCode);
+    } catch (smsErr) {
+      console.error('❌ SMS error:', smsErr.message);
+      return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა. სცადეთ ხელახლა.' });
+    }
 
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[DEV] verification code for ${email}: ${verificationCode}`);
     }
 
-    return res.status(200).json({ message: 'კოდი გაიგზავნა', email });
+    return res.status(200).json({
+      message: 'კოდი გამოგზავნილია SMS-ით',
+      phone: formattedPhone.replace(/\d(?=\d{4})/g, '*'),
+      email
+    });
 
   } catch (err) {
     console.error('register error:', err);
@@ -164,7 +198,7 @@ async function resend(req, res) {
 
     const company = await Company
       .findOne({ email: email.toLowerCase().trim(), isVerified: false })
-      .select('+verificationCode +verificationCodeExpires');
+      .select('+verificationCode +verificationCodeExpires +phone');
 
     if (!company) {
       return res.status(404).json({ message: 'რეგისტრაცია ვერ მოიძებნა' });
@@ -175,13 +209,19 @@ async function resend(req, res) {
     company.verificationCodeExpires = codeExpiresAt();
     await company.save();
 
-    await sendVerificationEmail(company.email, verificationCode);
+    // ✅ SMS გაგზავნა
+    try {
+      await sendVerificationSMS(`+${company.phone}`, verificationCode);
+    } catch (smsErr) {
+      console.error('❌ SMS error:', smsErr.message);
+      return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
+    }
 
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[DEV] resent code for ${company.email}: ${verificationCode}`);
     }
 
-    return res.status(200).json({ message: 'კოდი თავიდან გაიგზავნა' });
+    return res.status(200).json({ message: 'კოდი თავიდან გამოგზავნილია' });
 
   } catch (err) {
     console.error('resend error:', err);
@@ -240,10 +280,10 @@ async function login(req, res) {
     return res.status(500).json({ message: 'სერვერის შეცდომა' });
   }
 }
-// ════════════════════════════════════════════════════════════
-//  PERSON AUTH
-// ════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════
+//  PERSON AUTH (SMS VERIFICATION)
+// ════════════════════════════════════════════════════════════
 
 function generatePersonToken(personId) {
   return jwt.sign(
@@ -266,73 +306,119 @@ async function registerPerson(req, res) {
         !city || !sector || !experience || !availability || !phone || !email || !password) {
       return res.status(400).json({ message: 'ყველა ველი სავალდებულოა' });
     }
-    if (!/^\d{11}$/.test(idNumber))
+
+    if (!/^\d{11}$/.test(idNumber)) {
       return res.status(400).json({ message: 'პირადი ნომერი უნდა შეიცავდეს ზუსტად 11 ციფრს.' });
-    if (password.length < 8)
+    }
+
+    if (password.length < 8) {
       return res.status(400).json({ message: 'პაროლი მინიმუმ 8 სიმბოლოს უნდა შეიცავდეს.' });
+    }
+
+    // ✅ ტელეფონის ფორმატირება
+    const formattedPhone = formatPhoneForSMS(phone);
+    if (!/^\d{10,}$/.test(formattedPhone)) {
+      return res.status(400).json({ message: 'არასწორი ტელეფონის ნომერი.' });
+    }
 
     const normalizedEmail = email.toLowerCase().trim();
 
+    // ✅ თუ ელ-ფოსტა უკვე არის, მაგრამ არ არის ვერიფიცირებული
     const existing = await Person.findOne({ email: normalizedEmail });
     if (existing) {
       if (!existing.isVerified) {
         const code = generateCode();
         existing.verificationCode        = code;
         existing.verificationCodeExpires = codeExpiresAt();
+        existing.phone                   = formattedPhone;
         await existing.save();
-        await sendVerificationEmail(normalizedEmail, code);
-        return res.status(200).json({ message: 'კოდი ხელახლა გამოგზავნილია.' });
+
+        try {
+          await sendVerificationSMS(`+${formattedPhone}`, code);
+        } catch (smsErr) {
+          console.error('❌ SMS error:', smsErr.message);
+          return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა. სცადეთ ხელახლა.' });
+        }
+
+        return res.status(200).json({
+          message: 'კოდი ხელახლა გამოგზავნილია.',
+          phone: formattedPhone.replace(/\d(?=\d{4})/g, '*')
+        });
       }
       return res.status(409).json({ message: 'ეს ელ-ფოსტა უკვე რეგისტრირებულია.' });
     }
 
     const idExists = await Person.findOne({ idNumber });
-    if (idExists)
+    if (idExists) {
       return res.status(409).json({ message: 'ეს პირადი ნომერი უკვე რეგისტრირებულია.' });
+    }
 
     const code = generateCode();
-    await Person.create({
-      firstName, lastName, birthDate, gender, idNumber, city,
-      sector, experience, availability, schedules: schedules || [],
-      phone, email: normalizedEmail, password,
-      verificationCode:        code,
-      verificationCodeExpires: codeExpiresAt(),
-    });
 
-    await sendVerificationEmail(normalizedEmail, code);
+    try {
+      await sendVerificationSMS(`+${formattedPhone}`, code);
 
-    if (process.env.NODE_ENV !== 'production')
-      console.log(`[DEV] person code for ${normalizedEmail}: ${code}`);
+      await Person.create({
+        firstName, lastName, birthDate, gender, idNumber, city,
+        sector, experience, availability, schedules: schedules || [],
+        phone: formattedPhone,
+        email: normalizedEmail,
+        password,
+        verificationCode:        code,
+        verificationCodeExpires: codeExpiresAt(),
+      });
 
-    return res.status(201).json({ message: 'კოდი გამოგზავნილია თქვენს ელ-ფოსტაზე.' });
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[DEV] SMS code for ${formattedPhone}: ${code}`);
+      }
+
+      return res.status(201).json({
+        message: 'კოდი გამოგზავნილია SMS-ით.',
+        phone: formattedPhone.replace(/\d(?=\d{4})/g, '*'),
+      });
+
+    } catch (smsErr) {
+      console.error('❌ SMS error:', smsErr.message);
+      return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
+    }
 
   } catch (err) {
     console.error('registerPerson error:', err);
-    if (err.code === 11000)
+    if (err.code === 11000) {
       return res.status(409).json({ message: 'ეს მონაცემები უკვე რეგისტრირებულია.' });
+    }
     return res.status(500).json({ message: 'სერვერის შეცდომა.' });
   }
 }
 
-// POST /api/auth/person/verify-email
-async function verifyPersonEmail(req, res) {
+// POST /api/auth/person/verify-phone
+async function verifyPersonPhone(req, res) {
   try {
     const { email, code } = req.body;
-    if (!email || !code)
+
+    if (!email || !code) {
       return res.status(400).json({ message: 'ელ-ფოსტა და კოდი სავალდებულოა.' });
+    }
 
     const person = await Person
       .findOne({ email: email.toLowerCase().trim() })
       .select('+verificationCode +verificationCodeExpires');
 
-    if (!person)
+    if (!person) {
       return res.status(404).json({ message: 'მომხმარებელი ვერ მოიძებნა.' });
-    if (person.isVerified)
+    }
+
+    if (person.isVerified) {
       return res.status(400).json({ message: 'ანგარიში უკვე ვერიფიცირებულია.' });
-    if (!person.verificationCode || Date.now() > person.verificationCodeExpires)
+    }
+
+    if (!person.verificationCode || Date.now() > person.verificationCodeExpires) {
       return res.status(410).json({ message: 'კოდის ვადა გავიდა. სცადეთ ხელახლა გაგზავნა.' });
-    if (person.verificationCode !== String(code).trim())
+    }
+
+    if (person.verificationCode !== String(code).trim()) {
       return res.status(422).json({ message: 'კოდი არასწორია.' });
+    }
 
     person.isVerified              = true;
     person.verificationCode        = undefined;
@@ -353,7 +439,7 @@ async function verifyPersonEmail(req, res) {
     });
 
   } catch (err) {
-    console.error('verifyPersonEmail error:', err);
+    console.error('verifyPersonPhone error:', err);
     return res.status(500).json({ message: 'სერვერის შეცდომა.' });
   }
 }
@@ -362,25 +448,37 @@ async function verifyPersonEmail(req, res) {
 async function resendPersonCode(req, res) {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ message: 'ელ-ფოსტა სავალდებულოა.' });
+
+    if (!email) {
+      return res.status(400).json({ message: 'ელ-ფოსტა სავალდებულოა.' });
+    }
 
     const person = await Person
       .findOne({ email: email.toLowerCase().trim(), isVerified: false })
-      .select('+verificationCode +verificationCodeExpires');
+      .select('+verificationCode +verificationCodeExpires +phone');
 
-    if (!person)
+    if (!person) {
       return res.status(404).json({ message: 'მომხმარებელი ვერ მოიძებნა.' });
+    }
 
     const code = generateCode();
     person.verificationCode        = code;
     person.verificationCodeExpires = codeExpiresAt();
     await person.save();
-    await sendVerificationEmail(person.email, code);
 
-    if (process.env.NODE_ENV !== 'production')
-      console.log(`[DEV] resent person code for ${person.email}: ${code}`);
+    try {
+      await sendVerificationSMS(`+${person.phone}`, code);
 
-    return res.status(200).json({ message: 'კოდი ხელახლა გამოგზავნილია.' });
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[DEV] resent SMS code for ${person.phone}: ${code}`);
+      }
+
+      return res.status(200).json({ message: 'კოდი ხელახლა გამოგზავნილია.' });
+
+    } catch (smsErr) {
+      console.error('❌ SMS error:', smsErr.message);
+      return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
+    }
 
   } catch (err) {
     console.error('resendPersonCode error:', err);
@@ -392,21 +490,27 @@ async function resendPersonCode(req, res) {
 async function loginPerson(req, res) {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
+
+    if (!email || !password) {
       return res.status(400).json({ message: 'ელ-ფოსტა და პაროლი სავალდებულოა.' });
+    }
 
     const person = await Person
       .findOne({ email: email.toLowerCase().trim() })
       .select('+password');
 
-    if (!person)
+    if (!person) {
       return res.status(401).json({ message: 'მონაცემები არასწორია.' });
-    if (!person.isVerified)
+    }
+
+    if (!person.isVerified) {
       return res.status(403).json({ message: 'ანგარიში არ არის დადასტურებული.' });
+    }
 
     const isMatch = await person.comparePassword(password);
-    if (!isMatch)
+    if (!isMatch) {
       return res.status(401).json({ message: 'მონაცემები არასწორია.' });
+    }
 
     const token = generatePersonToken(person._id);
 
@@ -426,4 +530,8 @@ async function loginPerson(req, res) {
     return res.status(500).json({ message: 'სერვერის შეცდომა.' });
   }
 }
-module.exports = { register, verify, resend, login, registerPerson, verifyPersonEmail, resendPersonCode, loginPerson };
+
+module.exports = {
+  register, verify, resend, login,
+  registerPerson, verifyPersonPhone, resendPersonCode, loginPerson
+};

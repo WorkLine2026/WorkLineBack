@@ -2,7 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const {
   register, verify, resend, login,
-  registerPerson, verifyPersonEmail, resendPersonCode, loginPerson,
+  registerPerson, verifyPersonPhone, resendPersonCode, loginPerson,  // ← განხელე verifyPersonEmail → verifyPersonPhone
 } = require('../controllers/auth.controller');
 const router = express.Router();
 
@@ -24,13 +24,16 @@ const loginLimiter = rateLimit({
   message: { message: 'ძალიან ბევრი მცდელობა. სცადეთ მოგვიანებით' },
 });
 
+// ──── COMPANY ROUTES ────
 router.post('/register', registerLimiter, register);
 router.post('/verify',   verifyLimiter,   verify);
 router.post('/resend',   registerLimiter, resend);
 router.post('/login',    loginLimiter,    login);
-router.post('/person/register',     registerLimiter, registerPerson);
-router.post('/person/verify-email', verifyLimiter,   verifyPersonEmail);
-router.post('/person/resend-code',  registerLimiter, resendPersonCode);
-router.post('/person/login',        loginLimiter,    loginPerson);
+
+// ──── PERSON ROUTES (SMS VERIFICATION) ────
+router.post('/person/register',      registerLimiter, registerPerson);
+router.post('/person/verify-phone',  verifyLimiter,   verifyPersonPhone);   // ← /verify-phone (SMS კოდი)
+router.post('/person/resend-code',   registerLimiter, resendPersonCode);
+router.post('/person/login',         loginLimiter,    loginPerson);
 
 module.exports = router;
