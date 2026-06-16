@@ -288,9 +288,9 @@ async function login(req, res) {
   }
 }
 
-// ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 //  PERSON AUTH (SMS VERIFICATION)
-// ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 
 // POST /api/auth/person/register
 async function registerPerson(req, res) {
@@ -298,7 +298,8 @@ async function registerPerson(req, res) {
     const {
       firstName, lastName, birthDate, gender, idNumber, city,
       sector, experience, availability, schedules,
-      phone, email, password,
+      phone, email, password, 
+      skipVerification = false,  // 👈 ახალი პარამეტრი
     } = req.body;
 
     if (!firstName || !lastName || !birthDate || !gender || !idNumber ||
@@ -352,35 +353,79 @@ async function registerPerson(req, res) {
       return res.status(409).json({ message: 'ეს პირადი ნომერი უკვე რეგისტრირებულია.' });
     }
 
-    const code = generateCode();
+    // 🔥 skipVerification ლოგიკა
+    if (skipVerification) {
+      // ═══════════════════════════════════════════════════════════════════════
+      // თუ skipVerification = true → უშუალოდ ვერიფიცირებული + ტოკენი
+      // ═══════════════════════════════════════════════════════════════════════
+      try {
+        const person = await Person.create({
+          firstName, lastName, birthDate, gender, idNumber, city,
+          sector, experience, availability, schedules: schedules || [],
+          phone: formattedPhone,
+          email: normalizedEmail,
+          password,
+          isVerified: true,  // 👈 უშუალოდ verified
+          verificationCode: undefined,
+          verificationCodeExpires: undefined,
+        });
 
-    // ✅ SMS გაგზავნა (პლუსის გარეშე)
-    try {
-      await sendVerificationSMS(formattedPhone, code);
+        const token = generatePersonToken(person._id);
 
-      await Person.create({
-        firstName, lastName, birthDate, gender, idNumber, city,
-        sector, experience, availability, schedules: schedules || [],
-        phone: formattedPhone,
-        email: normalizedEmail,
-        password,
-        verificationCode:        code,
-        verificationCodeExpires: codeExpiresAt(),
-      });
+        console.log(`✅ [SKIP] Worker registered without verification: ${normalizedEmail}`);
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`[DEV] SMS code for ${formattedPhone}: ${code}`);
+        return res.status(201).json({
+          message: 'წარმატებულ დარეგისტრირდით!',
+          token,
+          user: {
+            id: person._id,
+            firstName: person.firstName,
+            lastName: person.lastName,
+            email: person.email,
+          },
+        });
+
+      } catch (err) {
+        console.error('registerPerson (skipVerification) error:', err);
+        if (err.code === 11000) {
+          return res.status(409).json({ message: 'ეს მონაცემები უკვე რეგისტრირებულია.' });
+        }
+        return res.status(500).json({ message: 'სერვერის შეცდომა.' });
       }
 
-      return res.status(201).json({
-        message: 'კოდი გამოგზავნილია SMS-ით.',
-        phone: formattedPhone.replace(/\d(?=\d{4})/g, '*'),
-        email: normalizedEmail
-      });
+    } else {
+      // ═══════════════════════════════════════════════════════════════════════
+      // თუ skipVerification = false → ჩვეულებრივი SMS ვერიფიკაცია
+      // ═══════════════════════════════════════════════════════════════════════
+      const code = generateCode();
 
-    } catch (smsErr) {
-      console.error('❌ SMS error:', smsErr.message);
-      return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
+      try {
+        await sendVerificationSMS(formattedPhone, code);
+
+        await Person.create({
+          firstName, lastName, birthDate, gender, idNumber, city,
+          sector, experience, availability, schedules: schedules || [],
+          phone: formattedPhone,
+          email: normalizedEmail,
+          password,
+          verificationCode:        code,
+          verificationCodeExpires: codeExpiresAt(),
+        });
+
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[DEV] SMS code for ${formattedPhone}: ${code}`);
+        }
+
+        return res.status(201).json({
+          message: 'კოდი გამოგზავნილია SMS-ით.',
+          phone: formattedPhone.replace(/\d(?=\d{4})/g, '*'),
+          email: normalizedEmail
+        });
+
+      } catch (smsErr) {
+        console.error('❌ SMS error:', smsErr.message);
+        return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
+      }
     }
 
   } catch (err) {
