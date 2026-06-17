@@ -69,7 +69,7 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
 
         <div class="header">
           <h1>🎉 კეთილი იყოს თქვენი მობრძანება!</h1>
-          <p>WorkLine — სამუშაოს პოვნის პლატფორმა</p>
+          <p>Personali — სამუშაოს პოვნის პლატფორმა</p>
         </div>
 
         <div class="content">
@@ -165,13 +165,13 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
           </div>
 
           <div class="alert">
-            ⏳ თქვენი პროფილი განხილვის მოლოდინში რჩება. WorkLine-ის გუნდი მალე დაგიკავშირდებათ შესაფერისი შეთავაზებით.
+            ⏳ თქვენი პროფილი განხილვის მოლოდინში რჩება. Personali-ის გუნდი მალე დაგიკავშირდებათ შესაფერისი შეთავაზებით.
           </div>
 
           <div class="section">
             <div class="section-title">📌 რა მოხდება შემდეგ?</div>
             <ul>
-              <li>✅ WorkLine გუნდი განიხილავს თქვენს პროფილს</li>
+              <li>✅ Personali გუნდი განიხილავს თქვენს პროფილს</li>
               <li>📞 თუ სჭირდება, დაგიკავშირდებათ ტელეფონით</li>
               <li>💼 შესაფერი ჯობების შეთავაზება პირად კაბინეტში</li>
             </ul>
@@ -180,16 +180,16 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
           <div class="section">
             <div class="section-title">💬 დაგვიკავშირდით</div>
             <p style="color: #555; font-size: 14px; line-height: 1.6;">
-              📧 support@workline.ge<br>
+              📧 support@personali.ge<br>
               📞 +995 555 12 34 56<br>
-              🌐 www.workline.ge
+              🌐 www.personali.ge
             </p>
           </div>
 
         </div>
 
         <div class="footer">
-          <p>© 2026 WorkLine. ყველა უფლება დაცულია.</p>
+          <p>© 2026 Personali. ყველა უფლება დაცულია.</p>
           <p style="margin-top: 8px; color: #bbb;">თქვენი კონფიდენციალურობა ჩვენთვის მნიშვნელოვანია</p>
         </div>
 
@@ -199,9 +199,9 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
     `;
 
     const mailOptions = {
-      from: `"WorkLine" <${fromEmail}>`,
+      from: `"Personali" <${fromEmail}>`,
       to: worker.email,
-      subject: `🎉 გემსახურებით WorkLine-ში, ${worker.fname}!`,
+      subject: `🎉 გემსახურებით Personali-ში, ${worker.fname}!`,
       html: htmlContent,
     };
 
@@ -271,7 +271,7 @@ async function sendAdminNotification(worker, bccEmails = []) {
         </div>
         <div class="content">
           <p style="margin-bottom: 15px;">
-            <strong>${worker.fname} ${worker.lname}</strong> ახლახან დარეგისტრირდა WorkLine-ში.
+            <strong>${worker.fname} ${worker.lname}</strong> ახლახან დარეგისტრირდა Personali-ში.
           </p>
 
           <div class="detail-row">
@@ -329,7 +329,7 @@ async function sendAdminNotification(worker, bccEmails = []) {
     `;
 
     const info = await transporter.sendMail({
-      from: `"WorkLine ნოტიფიკაცია" <${fromEmail}>`,
+      from: `"Personali ნოტიფიკაცია" <${fromEmail}>`,
       to: adminEmails.join(', '),
       subject: `🔔 ახალი ვორკერი: ${worker.fname} ${worker.lname}`,
       html: htmlContent,

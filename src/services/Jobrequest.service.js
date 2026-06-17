@@ -177,7 +177,7 @@ const sendJobRequestEmail = async (jobRequest) => {
     <div class="footer">
       <p><strong>ID:</strong> ${_id}</p>
       <p><strong>დრო:</strong> ${new Date(submittedAt).toLocaleString('ka-GE')}</p>
-      <p>WorkLine © 2026</p>
+      <p>Personali © 2026</p>
     </div>
   </div>
 </body>
@@ -202,7 +202,7 @@ const sendJobRequestEmail = async (jobRequest) => {
     }
 
     const mailOptions = {
-      from: `"WorkLine" <${fromEmail}>`,
+      from: `"Personali" <${fromEmail}>`,
       to: adminEmail, 
       subject: `📋 ახალი Job Request - ${companyName}`,
       html: htmlContent,
@@ -233,11 +233,11 @@ const sendTestEmail = async (email) => {
     const fromEmail = process.env.SENDER_EMAIL || process.env.EMAIL_USER;
     
     const info = await transporter.sendMail({
-      from: `"WorkLine ტესტი" <${fromEmail}>`,
+      from: `"Personali ტესტი" <${fromEmail}>`,
       to: email,
-      subject: 'WorkLine - Email ტესტი',
-      html: '<h1>Hello! 🎉</h1><p>WorkLine Gmail SMTP ტესტი წარმატებულია!</p>',
-      text: 'WorkLine test email',
+      subject: 'Personali - Email ტესტი',
+      html: '<h1>Hello! 🎉</h1><p>Personali Gmail SMTP ტესტი წარმატებულია!</p>',
+      text: 'Personali test email',
     });
 
     console.log('✅ ტესტ Email წარმატებით გაიგზავნა! ID:', info.messageId);

@@ -15,8 +15,8 @@ console.log('📧 EMAIL_USER:', process.env.EMAIL_USER);
 console.log('📧 EMAIL_PASSWORD:', process.env.EMAIL_PASS ? '✅ SET (' + process.env.EMAIL_PASS.length + ' chars)' : '❌ MISSING');
 console.log('📧 SENDER_EMAIL:', process.env.SENDER_EMAIL);
 console.log('📧 ADMIN_EMAILS:', process.env.ADMIN_EMAILS);
-console.log('📱 SMSOFFICE_API_KEY:', process.env.SMSOFFICE_API_KEY ? '✅ SET' : '❌ MISSING');
-console.log('📱 SMSOFFICE_SENDER:', process.env.SMSOFFICE_SENDER || 'WorkLine (default)');
+console.log('📱 AWS_ACCESS_KEY_ID:', process.env.AWS_ACCESS_KEY_ID ? '✅ SET' : '❌ MISSING');
+console.log('📱 AWS_REGION:', process.env.AWS_REGION || 'eu-central-1');
 console.log('🗄️  MONGO_URI:', process.env.MONGO_URI ? '✅ SET' : '❌ MISSING');
 console.log('🌐 FRONTEND_URL:', process.env.FRONTEND_URL || 'ℹ️ Not set (using default)');
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -88,7 +88,7 @@ app.get('/api/health', (_, res) => {
     timestamp: new Date().toISOString(),
     emailService: process.env.EMAIL_USER ? '✅ Gmail' : '❌ Not configured',
     adminEmail: process.env.ADMIN_EMAILS,
-    smsService: process.env.SMSOFFICE_API_KEY ? '✅ smsoffice.ge' : '❌ Not configured',
+    smsService: process.env.AWS_ACCESS_KEY_ID ? '✅ AWS SNS' : '❌ Not configured',
     frontendUrl: FRONTEND_URL,
   });
 });
@@ -136,54 +136,54 @@ app.get('/api/test-email', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// 📱 SMS TEST ENDPOINT (smsoffice.ge)
+// 📱 AWS SNS SMS TEST ENDPOINT (ბრაუზერით გასატესტი)
 // ═══════════════════════════════════════════════════════════════
 app.get('/api/test-sms', async (req, res) => {
   try {
-    if (!process.env.SMSOFFICE_API_KEY) {
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
       return res.status(400).json({
         success: false,
-        error: 'smsoffice.ge API Key არ არის კონფიგურირებული',
-        required: ['SMSOFFICE_API_KEY'],
+        error: 'AWS კრედენციალები არ არის კონფიგურირებული .env ფაილში!',
+        required: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'],
       });
     }
 
     const { sendVerificationSMS } = require('./src/services/sms.service');
     
-    const testPhone = req.query.phone || '+995591234567';
+    // თუ ბრაუზერში ?phone= არ მიუთითებ, გამოიყენებს ამ დეფოლტს
+    const testPhone = req.query.phone || '555123456'; 
+    const testCode = String(Math.floor(100000 + Math.random() * 900000));
     
     console.log('\n🧪 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🧪 SMS SERVICE TEST (smsoffice.ge)');
+    console.log('🧪 AWS SNS SMS SERVICE TEST');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📱 Sending test SMS to:', testPhone);
-    console.log('📱 Sender:', process.env.SMSOFFICE_SENDER || 'SMSOFFICE');
+    console.log('📱 Sending test SMS via AWS SNS to:', testPhone);
+    console.log('📱 AWS Region:', process.env.AWS_REGION || 'eu-central-1');
     
-    await sendVerificationSMS(testPhone, '654321');
+    await sendVerificationSMS(testPhone, testCode);
     
     console.log('✅ Test SMS sent successfully!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     res.json({ 
       success: true, 
-      message: 'SMS test successful!',
+      message: 'SMS ტესტი წარმატებით დასრულდა (AWS SNS)!',
       sentTo: testPhone,
-      from: process.env.SMSOFFICE_SENDER || 'SMSOFFICE',
-      service: 'smsoffice.ge'
+      generatedCode: testCode,
+      service: 'AWS SNS (Transactional)'
     });
     
   } catch (err) {
     console.error('\n🧪 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('🧪 SMS TEST FAILED');
+    console.error('🧪 AWS SNS SMS TEST FAILED');
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.error('Error:', err.message);
-    console.error('Code:', err.code);
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     res.status(500).json({ 
       success: false, 
-      error: err.message, 
-      code: err.code,
-      hint: 'Check .env file: SMSOFFICE_API_KEY must be correct'
+      error: err.message,
+      hint: 'შეამოწმე .env ფაილი და დარწმუნდი, რომ ნომერი დამატებული გაქვს AWS SNS Sandbox-ში.'
     });
   }
 });
@@ -203,8 +203,8 @@ app.get('/api/debug/env', (_, res) => {
     EMAIL_PASSWORD: process.env.EMAIL_PASS ? '✅ SET' : '❌ MISSING',
     SENDER_EMAIL: process.env.SENDER_EMAIL,
     ADMIN_EMAILS: process.env.ADMIN_EMAILS,
-    SMSOFFICE_API_KEY: process.env.SMSOFFICE_API_KEY ? '✅ SET' : '❌ MISSING',
-    SMSOFFICE_SENDER: process.env.SMSOFFICE_SENDER || 'SMSOFFICE',
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID ? '✅ SET' : '❌ MISSING',
+    AWS_REGION: process.env.AWS_REGION || 'eu-central-1',
     FRONTEND_URL: FRONTEND_URL,
   });
 });
@@ -229,9 +229,9 @@ app.use((err, req, res, next) => {
 // ═══════════════════════════════════════════════════════════════
 connectDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`🚀 WorkLine API running → http://localhost:${PORT}`);
+    console.log(`🚀 Personali API running → http://localhost:${PORT}`);
     console.log(`📧 Email Service: ${process.env.EMAIL_USER || 'not configured'}`);
-    console.log(`📱 SMS Service: smsoffice.ge (${process.env.SMSOFFICE_API_KEY ? '✅' : '❌'} configured)`);
+    console.log(`📱 SMS Service: AWS SNS (${process.env.AWS_ACCESS_KEY_ID ? '✅' : '❌'} configured)`);
     console.log(`👤 Admin Emails: ${process.env.ADMIN_EMAILS || 'not configured'}`);
     console.log(`✅ CORS allowed from: ${FRONTEND_URL}`);
   });

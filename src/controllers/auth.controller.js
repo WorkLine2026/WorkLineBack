@@ -30,9 +30,6 @@ function codeExpiresAt() {
   return new Date(Date.now() + ttl * 60 * 1000);
 }
 
-/**
- * ტელეფონის პირველადი ფორმატირება
- */
 function formatPhoneForSMS(phone) {
   let cleaned = phone.replace(/\D/g, '');
   if (cleaned.startsWith('995')) {
@@ -45,10 +42,9 @@ function formatPhoneForSMS(phone) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// COMPANY AUTH (SMS VERIFICATION)
+// COMPANY AUTH (AWS SNS VERIFICATION)
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── POST /api/auth/register ────────────────────────────────────────────────────
 async function register(req, res) {
   try {
     const { company, contact, password } = req.body;
@@ -110,11 +106,10 @@ async function register(req, res) {
       });
     }
 
-    // ✅ SMS გაგზავნა რეალურ ნომერზე (პლუსის გარეშე)
     try {
       await sendVerificationSMS(formattedPhone, verificationCode);
     } catch (smsErr) {
-      console.error('❌ SMS error:', smsErr.message);
+      console.error('❌ AWS SNS Error:', smsErr.message);
       return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა. სცადეთ ხელახლა.' });
     }
 
@@ -141,7 +136,6 @@ async function register(req, res) {
   }
 }
 
-// ── POST /api/auth/verify ──────────────────────────────────────────────────────
 async function verify(req, res) {
   try {
     const { email, code } = req.body;
@@ -197,7 +191,6 @@ async function verify(req, res) {
   }
 }
 
-// ── POST /api/auth/resend ──────────────────────────────────────────────────────
 async function resend(req, res) {
   try {
     const { email } = req.body;
@@ -216,11 +209,10 @@ async function resend(req, res) {
     company.verificationCodeExpires = codeExpiresAt();
     await company.save();
 
-    // ✅ SMS ხელახლა გაგზავნა (პლუსის გარეშე)
     try {
       await sendVerificationSMS(company.phone, verificationCode);
     } catch (smsErr) {
-      console.error('❌ SMS error:', smsErr.message);
+      console.error('❌ AWS SNS Error:', smsErr.message);
       return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
     }
 
@@ -236,7 +228,6 @@ async function resend(req, res) {
   }
 }
 
-// ── POST /api/auth/login ───────────────────────────────────────────────────────
 async function login(req, res) {
   try {
     const { email, password, identificationCode } = req.body;
@@ -289,17 +280,16 @@ async function login(req, res) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  PERSON AUTH (SMS VERIFICATION)
+// PERSON AUTH (AWS SNS VERIFICATION)
 // ════════════════════════════════════════════════════════════════════════════
 
-// POST /api/auth/person/register
 async function registerPerson(req, res) {
   try {
     const {
       firstName, lastName, birthDate, gender, idNumber, city,
       sector, experience, availability, schedules,
       phone, email, password, 
-      skipVerification = false,  // 👈 ახალი პარამეტრი
+      skipVerification = false,
     } = req.body;
 
     if (!firstName || !lastName || !birthDate || !gender || !idNumber ||
@@ -331,11 +321,10 @@ async function registerPerson(req, res) {
         existing.phone                   = formattedPhone;
         await existing.save();
 
-        // ✅ SMS ხელახლა გაგზავნა (პლუსის გარეშე)
         try {
           await sendVerificationSMS(formattedPhone, code);
         } catch (smsErr) {
-          console.error('❌ SMS error:', smsErr.message);
+          console.error('❌ AWS SNS Error:', smsErr.message);
           return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა. სცადეთ ხელახლა.' });
         }
 
@@ -353,11 +342,7 @@ async function registerPerson(req, res) {
       return res.status(409).json({ message: 'ეს პირადი ნომერი უკვე რეგისტრირებულია.' });
     }
 
-    // 🔥 skipVerification ლოგიკა
     if (skipVerification) {
-      // ═══════════════════════════════════════════════════════════════════════
-      // თუ skipVerification = true → უშუალოდ ვერიფიცირებული + ტოკენი
-      // ═══════════════════════════════════════════════════════════════════════
       try {
         const person = await Person.create({
           firstName, lastName, birthDate, gender, idNumber, city,
@@ -365,14 +350,12 @@ async function registerPerson(req, res) {
           phone: formattedPhone,
           email: normalizedEmail,
           password,
-          isVerified: true,  // 👈 უშუალოდ verified
+          isVerified: true,
           verificationCode: undefined,
           verificationCodeExpires: undefined,
         });
 
         const token = generatePersonToken(person._id);
-
-        console.log(`✅ [SKIP] Worker registered without verification: ${normalizedEmail}`);
 
         return res.status(201).json({
           message: 'წარმატებულ დარეგისტრირდით!',
@@ -387,16 +370,10 @@ async function registerPerson(req, res) {
 
       } catch (err) {
         console.error('registerPerson (skipVerification) error:', err);
-        if (err.code === 11000) {
-          return res.status(409).json({ message: 'ეს მონაცემები უკვე რეგისტრირებულია.' });
-        }
         return res.status(500).json({ message: 'სერვერის შეცდომა.' });
       }
 
     } else {
-      // ═══════════════════════════════════════════════════════════════════════
-      // თუ skipVerification = false → ჩვეულებრივი SMS ვერიფიკაცია
-      // ═══════════════════════════════════════════════════════════════════════
       const code = generateCode();
 
       try {
@@ -423,21 +400,17 @@ async function registerPerson(req, res) {
         });
 
       } catch (smsErr) {
-        console.error('❌ SMS error:', smsErr.message);
+        console.error('❌ AWS SNS Error:', smsErr.message);
         return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
       }
     }
 
   } catch (err) {
     console.error('registerPerson error:', err);
-    if (err.code === 11000) {
-      return res.status(409).json({ message: 'ეს მონაცემები უკვე რეგისტრირებულია.' });
-    }
     return res.status(500).json({ message: 'სერვერის შეცდომა.' });
   }
 }
 
-// POST /api/auth/person/verify-phone
 async function verifyPersonPhone(req, res) {
   try {
     const { email, code } = req.body;
@@ -490,7 +463,6 @@ async function verifyPersonPhone(req, res) {
   }
 }
 
-// POST /api/auth/person/resend-code
 async function resendPersonCode(req, res) {
   try {
     const { email } = req.body;
@@ -512,7 +484,6 @@ async function resendPersonCode(req, res) {
     person.verificationCodeExpires = codeExpiresAt();
     await person.save();
 
-    // ✅ SMS ხელახლა გაგზავნა (პლუსის გარეშე)
     try {
       await sendVerificationSMS(person.phone, code);
 
@@ -523,7 +494,7 @@ async function resendPersonCode(req, res) {
       return res.status(200).json({ message: 'კოდი ხელახლა გამოგზავნილია.' });
 
     } catch (smsErr) {
-      console.error('❌ SMS error:', smsErr.message);
+      console.error('❌ AWS SNS Error:', smsErr.message);
       return res.status(500).json({ message: 'SMS გაგზავნა ვერ მოხერხდა.' });
     }
 
@@ -533,7 +504,6 @@ async function resendPersonCode(req, res) {
   }
 }
 
-// POST /api/auth/person/login
 async function loginPerson(req, res) {
   try {
     const { email, password } = req.body;
