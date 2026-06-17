@@ -1,11 +1,16 @@
-const transporter = require('../config/email-config');
+const SibApiV3Sdk = require('sib-api-v3-sdk');
+
+// Setup Brevo client (გასწორებული ავტორიზაცია)
+const client = SibApiV3Sdk.ApiClient.instance;
+const apiKey = client.authentications['api-key'];
+apiKey.apiKey = process.env.BREVO_API_KEY;
 
 // ═══════════════════════════════════════════════════════════════
-// ✓ Send Welcome Email to Worker
+// ✓ Send Welcome Email to Worker (Brevo)
 // ═══════════════════════════════════════════════════════════════
-async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
+async function sendWorkerWelcomeEmail(worker) {
   try {
-    const fromEmail = process.env.SENDER_EMAIL || process.env.EMAIL_USER;
+    const senderEmail = process.env.SENDER_EMAIL || 'noreply@personali.ge';
     
     if (!worker.email) {
       console.warn('⚠️  Worker has no email - skipping welcome email');
@@ -13,7 +18,7 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
     }
 
     console.log('\n📧 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📧 SENDING WELCOME EMAIL');
+    console.log('📧 SENDING WELCOME EMAIL (Brevo)');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📧 To:', worker.email);
     console.log('📧 Name:', worker.fname, worker.lname);
@@ -198,28 +203,37 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
     </html>
     `;
 
-    const mailOptions = {
-      from: `"Personali" <${fromEmail}>`,
-      to: worker.email,
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    const msg = {
+      sender: {
+        name: 'Personali',
+        email: senderEmail,
+      },
+      to: [
+        {
+          email: worker.email,
+          name: `${worker.fname} ${worker.lname}`,
+        },
+      ],
       subject: `🎉 გემსახურებით Personali-ში, ${worker.fname}!`,
-      html: htmlContent,
+      htmlContent: htmlContent,
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    
-    console.log('✅ Welcome email sent successfully!');
-    console.log('✅ Message ID:', info.messageId);
+    console.log('📧 გაგზავნა Brevo-ით...');
+    await apiInstance.sendTransacEmail(msg);
+
+    console.log('✅ Welcome email წარმატებით გაიგზავნა!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     return true;
 
   } catch (err) {
     console.error('\n❌ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ WELCOME EMAIL SEND ERROR');
+    console.error('❌ WELCOME EMAIL SEND ERROR (Brevo)');
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.error('❌ Error:', err.message);
     console.error('❌ To:', worker.email);
-    console.error('❌ Code:', err.code);
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     return false;
@@ -227,11 +241,11 @@ async function sendWorkerWelcomeEmail(worker, bccEmails = []) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ✓ Send Admin Notification Email
+// ✓ Send Admin Notification Email (Brevo)
 // ═══════════════════════════════════════════════════════════════
-async function sendAdminNotification(worker, bccEmails = []) {
+async function sendAdminNotification(worker) {
   try {
-    const adminEmails = (process.env.ADMIN_EMAILS || '')
+    const adminEmails = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '')
       .split(',')
       .map(e => e.trim())
       .filter(e => e);
@@ -241,10 +255,10 @@ async function sendAdminNotification(worker, bccEmails = []) {
       return false;
     }
 
-    const fromEmail = process.env.SENDER_EMAIL || process.env.EMAIL_USER;
+    const senderEmail = process.env.SENDER_EMAIL || 'noreply@personali.ge';
 
     console.log('\n📧 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📧 SENDING ADMIN NOTIFICATION');
+    console.log('📧 SENDING ADMIN NOTIFICATION (Brevo)');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📧 To:', adminEmails.join(', '));
 
@@ -261,6 +275,7 @@ async function sendAdminNotification(worker, bccEmails = []) {
         .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
         .detail-key { font-weight: bold; color: #666; }
         .detail-val { color: #333; }
+        .badge { display: inline-block; background: #e8f4f8; color: #0066cc; padding: 4px 12px; border-radius: 12px; font-size: 13px; margin: 2px; }
         .btn { display: inline-block; background: #667eea; color: white; padding: 10px 20px; border-radius: 4px; text-decoration: none; margin-top: 15px; }
       </style>
     </head>
@@ -276,7 +291,7 @@ async function sendAdminNotification(worker, bccEmails = []) {
 
           <div class="detail-row">
             <span class="detail-key">სახელი / გვარი:</span>
-            <span class="detail-val">${worker.fname} ${worker.lname}</span>
+            <span class="detail-val"><strong>${worker.fname} ${worker.lname}</strong></span>
           </div>
           <div class="detail-row">
             <span class="detail-key">ელ-ფოსტა:</span>
@@ -319,6 +334,12 @@ async function sendAdminNotification(worker, bccEmails = []) {
             <span class="detail-val">${worker.salary ? worker.salary + ' ₾' : 'მოლაპარაკება'}</span>
           </div>
 
+          ${worker.certs && worker.certs.length > 0 ? `
+          <div style="margin-top: 15px;">
+            <strong style="display: block; margin-bottom: 8px;">სერტიფიკატები:</strong>
+            ${worker.certs.map(c => `<span class="badge">${c}</span>`).join('')}
+          </div>` : ''}
+
           <a href="${process.env.ADMIN_PANEL_URL || 'https://work-line-six.vercel.app/admin'}/workers" class="btn">
             ადმინ პანელში ნახვა
           </a>
@@ -328,22 +349,31 @@ async function sendAdminNotification(worker, bccEmails = []) {
     </html>
     `;
 
-    const info = await transporter.sendMail({
-      from: `"Personali ნოტიფიკაცია" <${fromEmail}>`,
-      to: adminEmails.join(', '),
-      subject: `🔔 ახალი ვორკერი: ${worker.fname} ${worker.lname}`,
-      html: htmlContent,
-    });
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
-    console.log('✅ Admin notification sent successfully!');
-    console.log('✅ Message ID:', info.messageId);
+    const recipientEmails = adminEmails.map(email => ({ email }));
+
+    const msg = {
+      sender: {
+        name: 'Personali ნოტიფიკაცია',
+        email: senderEmail,
+      },
+      to: recipientEmails,
+      subject: `🔔 ახალი ვორკერი: ${worker.fname} ${worker.lname}`,
+      htmlContent: htmlContent,
+    };
+
+    console.log('📧 გაგზავნა Brevo-ით...');
+    await apiInstance.sendTransacEmail(msg);
+
+    console.log('✅ Admin notification წარმატებით გაიგზავნა!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     return true;
 
   } catch (err) {
     console.error('\n❌ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ ADMIN NOTIFICATION ERROR');
+    console.error('❌ ADMIN NOTIFICATION ERROR (Brevo)');
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.error('❌ Error:', err.message);
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -355,5 +385,4 @@ async function sendAdminNotification(worker, bccEmails = []) {
 module.exports = {
   sendWorkerWelcomeEmail,
   sendAdminNotification,
-  transporter,
 };

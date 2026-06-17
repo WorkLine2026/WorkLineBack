@@ -1,34 +1,12 @@
-const nodemailer = require('nodemailer');
-const JobRequest = require('../models/Jobrequest');
+const SibApiV3Sdk = require('sib-api-v3-sdk');
+
+// Setup Brevo client (გასწორებული ავტორიზაცია)
+const client = SibApiV3Sdk.ApiClient.instance;
+const apiKey = client.authentications['api-key'];
+apiKey.apiKey = process.env.BREVO_API_KEY;
 
 // ═══════════════════════════════════════════════════════════════
-// Gmail SMTP ტრანსპორტერის ინიციალიზაცია (IPv4 კავშირი)
-// ═══════════════════════════════════════════════════════════════
-console.log('\n🚀 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-console.log('🚀 Gmail SMTP Route Setup Active');
-console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-console.log('EMAIL_USER:', process.env.EMAIL_USER || 'work.1999line@gmail.com');
-console.log('SENDER_EMAIL:', process.env.SENDER_EMAIL || process.env.EMAIL_USER);
-console.log('ADMIN_EMAIL:', process.env.ADMIN_EMAIL || 'work.1999line@gmail.com');
-console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-  console.log('⚠️  გაფრთხილება: EMAIL_USER ან EMAIL_PASS არ არის გაწერილი .env ფაილში!');
-}
-
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.EMAIL_PORT || '465'),
-  secure: true, // true 465 პორტისთვის (SSL)
-  family: 4, // ✅ IPv4-ს ეძლევა უპირატესობა (Render-ის IPv6 ნაკლებობის გამო)
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // თქვენი 16-ნიშნა აპლიკაციის პაროლი
-  },
-});
-
-// ═══════════════════════════════════════════════════════════════
-// ✓ Job Request Email გაგზავნა (Gmail SMTP)
+// ✓ Job Request Email გაგზავნა (Brevo)
 // ═══════════════════════════════════════════════════════════════
 const sendJobRequestEmail = async (jobRequest) => {
   try {
@@ -37,7 +15,6 @@ const sendJobRequestEmail = async (jobRequest) => {
       companyName,
       sector,
       contactName,
-      contactRole,
       phone,
       email,
       positions,
@@ -186,64 +163,95 @@ const sendJobRequestEmail = async (jobRequest) => {
 
     const textContent = `ახალი Job Request\n================\nკომპანია: ${companyName}\nსექტორი: ${sector}\nკონტაქტი: ${contactName} (${phone})\nელ-ფოსტა: ${email}\nპოზიციები: ${positions.join(', ')}\nკადრი: ${headcount}\nხანგრძლივობა: ${durationLabels[duration] || duration}\nქალაქი: ${city}\nანაზღაურება: ${salaryDisplay}\n${notes ? `\nშენიშვნები: ${notes}` : ''}`;
 
-    const fromEmail = process.env.SENDER_EMAIL || process.env.EMAIL_USER;
-    const adminEmail = process.env.ADMIN_EMAIL || 'work.1999line@gmail.com';
+    const senderEmail = process.env.SENDER_EMAIL || 'noreply@personali.ge';
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@personali.ge';
+
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
     const bccEmails = [];
     if (email && email.trim()) {
-      bccEmails.push(email.trim());
+      bccEmails.push({ email: email.trim() });
     }
 
-    if (process.env.JOB_REQUEST_CC_EMAIL && 
-        process.env.JOB_REQUEST_CC_EMAIL.trim() &&
-        process.env.JOB_REQUEST_CC_EMAIL !== adminEmail &&
-        !bccEmails.includes(process.env.JOB_REQUEST_CC_EMAIL)) {
-      bccEmails.push(process.env.JOB_REQUEST_CC_EMAIL.trim());
-    }
-
-    const mailOptions = {
-      from: `"Personali" <${fromEmail}>`,
-      to: adminEmail, 
+    const msg = {
+      sender: {
+        name: 'Personali',
+        email: senderEmail,
+      },
+      to: [
+        {
+          email: adminEmail,
+          name: 'Personali Admin',
+        },
+      ],
+      bcc: bccEmails,
       subject: `📋 ახალი Job Request - ${companyName}`,
-      html: htmlContent,
-      text: textContent,
+      htmlContent: htmlContent,
+      textContent: textContent,
     };
 
-    if (bccEmails.length > 0) {
-      mailOptions.bcc = bccEmails.join(', '); // Nodemailer-ისთვის სთრინგად გადაბმა ჯობია
-    }
+    console.log('\n📧 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 SENDING JOB REQUEST EMAIL (Brevo)');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 To:', adminEmail);
+    console.log('📧 Company:', companyName);
+    console.log('📧 BCC:', bccEmails.map(b => b.email).join(', ') || 'none');
 
-    console.log('✉️ გაგზავნა Gmail SMTP-ით...');
+    await apiInstance.sendTransacEmail(msg);
 
-    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Job Request email წარმატებით გაიგზავნა!');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-    console.log('✅ Email წარმატებით გაიგზავნა! ID:', info.messageId);
-    return { success: true, messageId: info.messageId };
+    return { success: true };
   } catch (error) {
-    console.error('❌ Gmail SMTP შეცდომა:', error.message);
+    console.error('\n❌ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ JOB REQUEST EMAIL SEND ERROR (Brevo)');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ Error:', error.message);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
     throw new Error(error.message);
   }
 };
 
 // ═══════════════════════════════════════════════════════════════
-// ✓ ტესტ Email
+// ✓ ტესტ Email (Brevo)
 // ═══════════════════════════════════════════════════════════════
 const sendTestEmail = async (email) => {
   try {
-    const fromEmail = process.env.SENDER_EMAIL || process.env.EMAIL_USER;
-    
-    const info = await transporter.sendMail({
-      from: `"Personali ტესტი" <${fromEmail}>`,
-      to: email,
-      subject: 'Personali - Email ტესტი',
-      html: '<h1>Hello! 🎉</h1><p>Personali Gmail SMTP ტესტი წარმატებულია!</p>',
-      text: 'Personali test email',
-    });
+    const senderEmail = process.env.SENDER_EMAIL || 'noreply@personali.ge';
 
-    console.log('✅ ტესტ Email წარმატებით გაიგზავნა! ID:', info.messageId);
-    return { success: true, messageId: info.messageId };
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    const msg = {
+      sender: {
+        name: 'Personali Test',
+        email: senderEmail,
+      },
+      to: [{ email: email }],
+      subject: 'Personali - Email ტესტი',
+      htmlContent: '<h1>Hello! 🎉</h1><p>Personali Brevo Email ტესტი წარმატებულია!</p>',
+      textContent: 'Personali test email',
+    };
+
+    console.log('\n📧 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 SENDING TEST EMAIL (Brevo)');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📧 To:', email);
+
+    await apiInstance.sendTransacEmail(msg);
+
+    console.log('✅ Test email წარმატებით გაიგზავნა!');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    return { success: true };
   } catch (error) {
-    console.error('❌ ტესტ email შეცდომა:', error.message);
+    console.error('\n❌ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ TEST EMAIL ERROR (Brevo)');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ Error:', error.message);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
     throw new Error(error.message);
   }
 };

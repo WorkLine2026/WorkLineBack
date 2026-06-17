@@ -1,5 +1,5 @@
 const JobRequest = require('../models/Jobrequest');
-const { sendJobRequestEmail } = require('../services/Jobrequest.service'); // ✅ სწორი import
+const { sendJobRequestEmail } = require('../services/Jobrequest.service');
 
 // ═══════════════════════════════════════════════════════════════
 // Job Request შექმნა (POST)
@@ -40,39 +40,17 @@ exports.createJobRequest = async (req, res) => {
     // ─────────────────────────────────────────────────────────────
     // ვალიდაცია
     // ─────────────────────────────────────────────────────────────
-    if (!companyName) {
-      return res.status(400).json({ message: 'კომპანიის სახელი აუცილებელია' });
-    }
-    if (!sector) {
-      return res.status(400).json({ message: 'სექტორი აუცილებელია' });
-    }
-    if (!contactName) {
-      return res.status(400).json({ message: 'საკონტაქტო პირი აუცილებელია' });
-    }
-    if (!phone) {
-      return res.status(400).json({ message: 'ტელეფონი აუცილებელია' });
-    }
-    if (!email) {
-      return res.status(400).json({ message: 'ელ-ფოსტა აუცილებელია' });
-    }
-    if (!positions || positions.length === 0) {
-      return res.status(400).json({ message: 'მინიმუმ ერთი პოზიცია აუცილებელია' });
-    }
-    if (!headcount) {
-      return res.status(400).json({ message: 'კადრების რაოდენობა აუცილებელია' });
-    }
-    if (!duration) {
-      return res.status(400).json({ message: 'სამუშაოს ხანგრძლივობა აუცილებელია' });
-    }
-    if (!city) {
-      return res.status(400).json({ message: 'ქალაქი აუცილებელია' });
-    }
-    if (!startDate) {
-      return res.status(400).json({ message: 'დაწყების თარიღი აუცილებელია' });
-    }
-    if (!agreed) {
-      return res.status(400).json({ message: 'უნდა დაეთანხმოთ პირობებს' });
-    }
+    if (!companyName) return res.status(400).json({ message: 'კომპანიის სახელი აუცილებელია' });
+    if (!sector) return res.status(400).json({ message: 'სექტორი აუცილებელია' });
+    if (!contactName) return res.status(400).json({ message: 'საკონტაქტო პირი აუცილებელია' });
+    if (!phone) return res.status(400).json({ message: 'ტელეფონი აუცილებელია' });
+    if (!email) return res.status(400).json({ message: 'ელ-ფოსტა აუცილებელია' });
+    if (!positions || positions.length === 0) return res.status(400).json({ message: 'მინიმუმ ერთი პოზიცია აუცილებელია' });
+    if (!headcount) return res.status(400).json({ message: 'კადრების რაოდენობა აუცილებელია' });
+    if (!duration) return res.status(400).json({ message: 'სამუშაოს ხანგრძლივობა აუცილებელია' });
+    if (!city) return res.status(400).json({ message: 'ქალაქი აუცილებელია' });
+    if (!startDate) return res.status(400).json({ message: 'დაწყების თარიღი აუცილებელია' });
+    if (!agreed) return res.status(400).json({ message: 'უნდა დაეთანხმოთ პირობებს' });
 
     // ─────────────────────────────────────────────────────────────
     // IP მისამართი
@@ -117,25 +95,19 @@ exports.createJobRequest = async (req, res) => {
     });
 
     // ─────────────────────────────────────────────────────────────
-    // ბაზაში შენახვა
+    // ბაზაში შენახვა და მეილის გაგზავნა
     // ─────────────────────────────────────────────────────────────
-const savedJobRequest = await newJobRequest.save();
+    const savedJobRequest = await newJobRequest.save();
+    console.log('✅ Job Request შენახულია:', savedJobRequest._id);
 
-console.log('✅ Job Request შენახულია:', savedJobRequest._id);
+    try {
+      console.log('📧 Email გაგზავნის დაწყება...');
+      await sendJobRequestEmail(savedJobRequest);
+      console.log('✅ Email წარმატებით გაიგზავნა');
+    } catch (emailError) {
+      console.error('❌ Email გაგზავნის შეცდომა:', emailError);
+    }
 
-try {
-  console.log('📧 Email გაგზავნის დაწყება...');
-
-  await sendJobRequestEmail(savedJobRequest);
-
-  console.log('✅ Email წარმატებით გაიგზავნა');
-} catch (emailError) {
-  console.error('❌ Email გაგზავნის შეცდომა:', emailError);
-}
-
-    // ─────────────────────────────────────────────────────────────
-    // წარმატებული პასუხი
-    // ─────────────────────────────────────────────────────────────
     return res.status(201).json({
       success: true,
       message: 'თქვენი მოთხოვნა წარმატებით მიღებულია',
@@ -195,7 +167,6 @@ exports.getAllJobRequests = async (req, res) => {
 exports.getJobRequestById = async (req, res) => {
   try {
     const { id } = req.params;
-
     const jobRequest = await JobRequest.findById(id);
 
     if (!jobRequest) {
@@ -265,7 +236,6 @@ exports.updateJobRequest = async (req, res) => {
 exports.deleteJobRequest = async (req, res) => {
   try {
     const { id } = req.params;
-
     const jobRequest = await JobRequest.findByIdAndDelete(id);
 
     if (!jobRequest) {

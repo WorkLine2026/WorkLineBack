@@ -404,3 +404,5 @@ exports.getStatistics = async (req, res) => {
     });
   }
 };
+
+module.exports = exports;
