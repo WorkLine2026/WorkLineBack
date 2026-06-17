@@ -44,18 +44,22 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // ═══════════════════════════════════════════════════════════════
-// Middleware - CORS დაკონფიგურირება (trailing slash მოსწორებული)
+// Middleware - CORS დაკონფიგურირება (personali.ge დამატებული)
 // ═══════════════════════════════════════════════════════════════
-const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:4200').replace(/\/$/, '');
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://personali.ge').replace(/\/$/, '');
 
 app.use(cors({
   origin: function (origin, callback) {
     const allowedOrigins = [
       FRONTEND_URL,
+      'https://personali.ge',
+      'http://personali.ge',
+      'https://www.personali.ge',
       'http://localhost:4200',
       'http://localhost:3000',
     ];
     
+    // ნებას რთავს Postman-ს (!origin) ან მასივში არსებულ დომეინებს
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -122,7 +126,7 @@ app.get('/api/test-email', async (req, res) => {
     console.error('\n🧪 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.error('🧪 EMAIL TEST FAILED');
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('Error:', err.message);
+    document.write(err.message);
     console.error('Code:', err.code);
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
@@ -136,7 +140,7 @@ app.get('/api/test-email', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// 📱 AWS SNS SMS TEST ENDPOINT (ბრაუზერით გასატესტი)
+// 📱 AWS SNS SMS TEST ENDPOINT
 // ═══════════════════════════════════════════════════════════════
 app.get('/api/test-sms', async (req, res) => {
   try {
@@ -150,7 +154,6 @@ app.get('/api/test-sms', async (req, res) => {
 
     const { sendVerificationSMS } = require('./src/services/sms.service');
     
-    // თუ ბრაუზერში ?phone= არ მიუთითებ, გამოიყენებს ამ დეფოლტს
     const testPhone = req.query.phone || '555123456'; 
     const testCode = String(Math.floor(100000 + Math.random() * 900000));
     
